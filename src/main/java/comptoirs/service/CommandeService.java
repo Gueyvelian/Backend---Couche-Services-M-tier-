@@ -2,6 +2,7 @@ package comptoirs.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
@@ -72,8 +73,8 @@ public class CommandeService {
      * Enregistre une nouvelle ligne de commande pour une commande connue par sa clé,
      * Incrémente la quantité totale commandée (Produit.unitesCommandees) avec la quantitÉ à commander
      * Règles métier :
-     * - le produit référencé doit exister et ne pas être indisponible
-     * - la commande doit exister
+     * - le produit référencé doit exister et ne pas être indisponible  OK
+     * - la commande doit exister   OK
      * - la commande ne doit pas être déjà envoyée (le champ 'envoyeele' doit être null)
      * - la quantité doit être positive
      * - La quantité en stock du produit ne doit pas être inférieure au total des quantités commandées
@@ -89,14 +90,33 @@ public class CommandeService {
     @Transactional
     public Ligne ajouterLigne(int commandeNum, int produitRef, @Positive int quantite) {
         // TODO : implémenter cette méthode
-        throw new UnsupportedOperationException("Pas encore implémenté");
+        //throw new UnsupportedOperationException("Pas encore implémenté");
+        //trouver la commende a partir de son numéro
+        var commande = commandeDao.findById(commandeNum).orElseThrow();
+        var produit = produitDao.findById(produitRef).orElseThrow();
+        var stock = produit.isIndisponible();
+        if (stock == false) {
+            var commandeenvoyer = commande.getEnvoyeele();
+            if (commandeenvoyer == null) {
+                    if (quantite <= produit.getUnitesEnStock()){
+                        Ligne nouvelle_commende = new Ligne( commande, produit, quantite );
+                        ligneDao.save(nouvelle_commende);
+                        produit.setUnitesCommandees(produit.getUnitesCommandees() + quantite);
+                        produitDao.save(produit);
+                        return nouvelle_commende;
+                    }else throw new IllegalStateException("La quantiter est hors stock");
+            }
+            else throw new IllegalStateException("La commande a deja ete envoyer");
+        }
+        else throw new IllegalStateException("Le produit n'est pas disponible");
+
     }
 
     /**
      * Service métier : Enregistre l'expédition d'une commande connue par sa clé
      * Règles métier :
-     * - la commande doit exister
-     * - la commande ne doit pas être déjà envoyée (le champ 'envoyeele' doit être null)
+     * - la commande doit exister   OK
+     * - la commande ne doit pas être déjà envoyée (le champ 'envoyeele' doit être null)    OK
      * - On renseigne la date d'expédition (envoyeele) avec la date du jour
      * - Pour chaque produit dans les lignes de la commande :
      *      décrémente la quantité en stock (Produit.unitesEnStock) de la quantité dans la commande
@@ -109,6 +129,21 @@ public class CommandeService {
     @Transactional
     public Commande enregistreExpedition(int commandeNum) {
         // TODO : implémenter cette méthode
-        throw new UnsupportedOperationException("Pas encore implémenté");
+        var commande = commandeDao.findById(commandeNum).orElseThrow();
+        var commandeenvoyer = commande.getEnvoyeele();
+        if (commandeenvoyer != null) {
+            throw new IllegalStateException("la commende n'est pas envoyer");
+        }
+        LocalDate date = LocalDate.now();
+        commande.setEnvoyeele(date);
+        commandeDao.save(commande);
+        List<Ligne> Toutligne= commande.getLignes();
+        for (Ligne ligne : Toutligne){
+            var produit = ligne.getProduit();
+            produit.setUnitesEnStock(produit.getUnitesEnStock() - ligne.getQuantite());
+            produit.setUnitesCommandees(produit.getUnitesCommandees() - ligne.getQuantite());
+        }
+
+        return commande;
     }
 }
